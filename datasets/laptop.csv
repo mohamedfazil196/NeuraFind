@@ -1,0 +1,36 @@
+name,price,ram,storage,vram,processor,brand,rating,reviews,display_size,weight,battery_hours
+Acer Aspire 3,35999,8,512,2,Intel Core i3,Acer,3.8,8500,15.6,1.9,7
+Lenovo IdeaPad Slim 3,42999,8,512,2,AMD Ryzen 5,Lenovo,4.0,12000,15.6,1.62,8
+HP Laptop 15s,44999,8,512,2,Intel Core i5,HP,4.0,11000,15.6,1.75,7
+ASUS VivoBook 15,45999,8,512,2,Intel Core i5,ASUS,4.1,13500,15.6,1.8,8
+Dell Inspiron 15,47999,8,512,4,Intel Core i5,Dell,4.1,10000,15.6,1.86,7
+Lenovo IdeaPad Gaming 3,54999,8,512,4,AMD Ryzen 5,Lenovo,4.2,18000,15.6,2.2,5
+ASUS TUF Gaming A15,59999,16,512,4,AMD Ryzen 5,ASUS,4.3,22000,15.6,2.3,6
+HP Victus 15,54999,8,512,6,Intel Core i5,HP,4.2,16000,15.6,2.37,5
+Acer Nitro V15,56999,16,512,4,Intel Core i5,Acer,4.2,14000,15.6,2.4,5
+MSI Modern 14,54999,16,512,2,Intel Core i7,MSI,4.3,9000,14.0,1.4,10
+Lenovo ThinkBook 14,59999,16,512,2,Intel Core i5,Lenovo,4.3,12000,14.0,1.55,9
+Dell Vostro 14,52999,8,512,4,Intel Core i5,Dell,4.0,8500,14.0,1.65,7
+HP ProBook 440 G9,64999,16,512,2,Intel Core i7,HP,4.3,7500,14.0,1.5,9
+ASUS ExpertBook B1,55999,8,256,2,Intel Core i5,ASUS,4.1,6000,14.0,1.4,10
+Samsung Galaxy Book4,79999,16,512,4,Intel Core i7,Samsung,4.4,11000,15.6,1.55,12
+Apple MacBook Air M2,94900,8,256,10,Apple M2,Apple,4.7,65000,13.6,1.24,18
+Apple MacBook Air M3,119900,16,512,10,Apple M3,Apple,4.8,52000,13.6,1.24,18
+Lenovo ThinkPad X1 Carbon,154999,32,1024,4,Intel Core i7,Lenovo,4.7,18000,14.0,1.12,15
+HP Spectre x360 14,134999,16,512,4,Intel Core i7,HP,4.6,15000,13.5,1.36,16
+Dell XPS 13,129999,16,512,4,Intel Core i7,Dell,4.6,19000,13.4,1.2,12
+ASUS ZenBook 14 OLED,89999,16,512,4,Intel Core i7,ASUS,4.5,24000,14.0,1.35,14
+Dell XPS 15 OLED,189999,32,512,8,Intel Core i9,Dell,4.7,22000,15.6,1.86,8
+ASUS ROG Zephyrus G16,179999,32,1024,16,Intel Core i9,ASUS,4.8,28000,16.0,2.1,6
+MSI Raider GE78,249999,64,2048,16,Intel Core i9,MSI,4.8,15000,17.3,2.9,4
+Acer Swift Edge 16,84999,32,1024,4,AMD Ryzen 7,Acer,4.4,12000,16.0,1.17,12
+Samsung Galaxy Book3 Ultra,194999,32,1024,16,Intel Core i9,Samsung,4.7,9000,16.0,1.81,7
+Lenovo Legion Pro 7i,219999,32,1024,16,Intel Core i9,Lenovo,4.8,32000,16.0,2.5,5
+Apple MacBook Pro 14 M3,199900,18,512,18,Apple M3 Pro,Apple,4.8,45000,14.2,1.61,18
+Apple MacBook Pro 16 M3 Max,349900,48,1024,40,Apple M3 Max,Apple,4.9,30000,16.2,2.15,22
+ASUS ROG Strix G18,229999,32,1024,16,Intel Core i9,ASUS,4.8,21000,18.0,3.1,4
+HP OMEN 16,119999,16,512,8,AMD Ryzen 7,HP,4.5,18000,16.1,2.36,6
+Lenovo LOQ 15,72999,16,512,8,Intel Core i7,Lenovo,4.4,24000,15.6,2.4,6
+ASUS TUF Gaming F15,79999,16,512,8,Intel Core i7,ASUS,4.5,19000,15.6,2.3,7
+Dell G15 Gaming,74999,16,512,8,Intel Core i7,Dell,4.3,16000,15.6,2.48,5
+Acer Predator Helios 16,124999,32,1024,8,Intel Core i7,Acer,4.6,12000,16.0,2.8,6

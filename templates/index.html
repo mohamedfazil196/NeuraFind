@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NeuraFind — AI Device Recommender</title>
+  <meta name="description" content="Tell us your budget and what matters — NeuraFind's AI finds your perfect device instantly." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+
+<canvas id="particle-canvas"></canvas>
+
+<!-- ── Navbar ─────────────────────────────────────────────────────────────── -->
+<nav class="navbar">
+  <div class="nav-inner">
+    <div class="nav-logo">
+      <img src="{{ url_for('static', filename='logo.jpg') }}" alt="NeuraFind Logo" class="logo-image" />
+      <span class="logo-text">Neura<span class="logo-accent">Find</span></span>
+    </div>
+    <div class="nav-pills">
+      <button class="nav-pill active" onclick="showSection('home')">🏠 Home</button>
+      <button class="nav-pill" onclick="showSection('history')">📜 History</button>
+    </div>
+    <div class="nav-gemini-badge">
+      <div class="gemini-dot"></div>
+      <span>Advanced AI Engine</span>
+    </div>
+  </div>
+</nav>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     HOME SECTION
+ ══════════════════════════════════════════════════════════════════════════ -->
+<main class="main-wrapper" id="section-home">
+
+  <!-- Hero -->
+  <section class="hero">
+    <h1 class="hero-title">Stop Googling.<br><span class="gradient-text">Just Tell Us What You Need.</span></h1>
+    <p class="hero-sub">No tech jargon. Pick your budget and what matters most — our AI finds your perfect device in seconds.</p>
+  </section>
+
+  <!-- ── Wizard Container ───────────────────────────────────────────────── -->
+  <div class="wizard-container">
+
+    <!-- Steps -->
+    <div class="steps-track">
+      <div class="step-item active" id="si-1"><div class="step-circle">1</div><span class="step-label">Device</span></div>
+      <div class="step-line" id="sl-1"></div>
+      <div class="step-item" id="si-2"><div class="step-circle">2</div><span class="step-label">Budget</span></div>
+      <div class="step-line" id="sl-2"></div>
+      <div class="step-item" id="si-3"><div class="step-circle">3</div><span class="step-label">Priorities</span></div>
+      <div class="step-line" id="sl-3"></div>
+      <div class="step-item" id="si-4"><div class="step-circle">4</div><span class="step-label">AI Results</span></div>
+    </div>
+
+    <!-- ── Step 1: Device Type ───────────────────────────────────────────── -->
+    <div class="wizard-step" id="step-1">
+      <h2 class="step-title">What device are you looking for?</h2>
+      <div class="device-grid">
+        <button class="device-card" onclick="selectDevice('mobile')" id="dc-mobile">
+          <div class="device-icon-wrap">📱</div>
+          <div class="device-name">Mobile Phone</div>
+          <div class="device-desc">Smartphones & 5G</div>
+          <div class="device-count">60+ devices</div>
+        </button>
+        <button class="device-card" onclick="selectDevice('laptop')" id="dc-laptop">
+          <div class="device-icon-wrap">💻</div>
+          <div class="device-name">Laptop</div>
+          <div class="device-desc">Ultrabooks & Gaming</div>
+          <div class="device-count">35+ devices</div>
+        </button>
+        <button class="device-card" onclick="selectDevice('smartwatch')" id="dc-smartwatch">
+          <div class="device-icon-wrap">⌚</div>
+          <div class="device-name">Smartwatch</div>
+          <div class="device-desc">Fitness & Health</div>
+          <div class="device-count">25+ devices</div>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Step 2: Budget ─────────────────────────────────────────────────── -->
+    <div class="wizard-step hidden" id="step-2">
+      <button class="back-btn" onclick="goToStep(1)">← Back</button>
+      <h2 class="step-title" id="s2-title" style="margin-top:14px">What's your budget?</h2>
+      <p class="step-hint">Slide to set your maximum spend</p>
+
+      <div class="budget-display" id="budget-display">₹ 25,000</div>
+      <div class="budget-range-wrap">
+        <input type="range" class="budget-range" id="budget-slider"
+          min="5000" max="350000" step="1000" value="25000"
+          oninput="updateBudget()" />
+        <div class="budget-track-labels">
+          <span>₹5K</span>
+          <span>₹50K</span>
+          <span>₹1L</span>
+          <span>₹2L</span>
+          <span>₹3.5L</span>
+        </div>
+      </div>
+
+      <!-- Quick presets -->
+      <div class="budget-presets" id="budget-presets"></div>
+
+      <button class="btn-next" onclick="goToStep(3)">Set Budget & Continue →</button>
+    </div>
+
+    <!-- ── Step 3: Priorities ─────────────────────────────────────────────── -->
+    <div class="wizard-step hidden" id="step-3">
+      <button class="back-btn" onclick="goToStep(2)">← Back</button>
+      <h2 class="step-title" style="margin-top:14px">What matters most to you?</h2>
+      <p class="step-hint">Choose <strong>one or more</strong> — our AI will balance them perfectly</p>
+
+      <div class="priority-grid" id="priority-grid">
+        <!-- Populated by JS based on device type -->
+      </div>
+
+      <!-- Optional brand -->
+      <div class="brand-row">
+        <label class="form-label">🏷️ Brand preference <span style="color:var(--text-muted)">(optional)</span></label>
+        <select class="form-select" id="brand-select">
+          <option value="">Any brand</option>
+        </select>
+      </div>
+
+      <!-- Market Insight banner -->
+      <button class="insight-btn" onclick="loadMarketInsight()">
+        <span>🔍</span>
+        <div>
+          <div class="insight-btn-title">AI Market Insight</div>
+          <div class="insight-btn-sub">Get an AI buying guide for this category</div>
+        </div>
+        <span class="insight-arrow">→</span>
+      </button>
+
+      <div class="insight-panel hidden" id="insight-panel">
+        <div class="insight-loader" id="insight-loader" style="display:none">
+          <div class="mini-spinner"></div> Generating AI analysis…
+        </div>
+        <div id="insight-content"></div>
+      </div>
+
+      <button class="btn-submit" id="submit-btn" onclick="runRecommend()">
+        <span>✦</span>
+        <span id="submit-label">Find My Best Matches</span>
+        <div class="btn-shimmer"></div>
+      </button>
+    </div>
+
+    <!-- ── Step 4: Results ────────────────────────────────────────────────── -->
+    <div class="wizard-step hidden" id="step-4">
+      <div class="results-top-row">
+        <div>
+          <button class="back-btn" onclick="goToStep(3)">← New Search</button>
+          <h2 class="step-title" style="margin-top:10px">Your Top <span class="gradient-text">AI Picks</span></h2>
+        </div>
+        <div class="results-actions">
+          <span class="results-badge" id="results-badge">3 matches</span>
+          <button class="action-btn" id="btn-compare" style="display:none" onclick="openBattleMode()">⚔️ Compare Top 2</button>
+          <button class="action-btn" onclick="exportPDF()">📄 Export PDF</button>
+        </div>
+      </div>
+
+      <!-- Loader -->
+      <div class="results-loader hidden" id="results-loader">
+        <div class="loader-orbs">
+          <div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div>
+        </div>
+        <p class="loader-text">🧠 Analysing devices · AI generating insights…</p>
+      </div>
+
+      <!-- Result cards -->
+      <div id="results-list"></div>
+
+    </div>
+  </div>
+</main>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     HISTORY SECTION
+ ══════════════════════════════════════════════════════════════════════════ -->
+<main class="main-wrapper hidden" id="section-history">
+  <section class="hero" style="padding-bottom:0">
+    <h2 class="step-title">📜 Search History</h2>
+    <p class="hero-sub">Your recent recommendation sessions</p>
+  </section>
+  <div class="wizard-container" style="max-width:680px">
+    <div id="history-list" class="history-list">
+      <div class="empty-state">No history yet — run your first search!</div>
+    </div>
+  </div>
+</main>
+
+<!-- ── Chat FAB ────────────────────────────────────────────────────────────── -->
+<button class="chat-fab" onclick="toggleChat()">
+  <span class="chat-fab-icon">💬</span>
+  <span class="chat-fab-label">Ask AI</span>
+</button>
+
+<!-- ── Chat Panel ─────────────────────────────────────────────────────────── -->
+<div class="chat-panel hidden" id="chat-panel">
+  <div class="chat-header">
+    <div class="chat-header-left">
+      <div class="chat-avatar">🤖</div>
+      <div>
+        <div class="chat-name">NeuraBot</div>
+        <div class="chat-status"><span class="online-dot"></span> Powered by AI</div>
+      </div>
+    </div>
+    <button class="chat-close" onclick="toggleChat()">✕</button>
+  </div>
+  <div class="chat-messages" id="chat-messages">
+    <div class="chat-msg bot">
+      <div class="msg-bubble">Hey! 👋 I'm NeuraBot. Confused between two phones? Not sure which laptop to buy? Just ask — I'll help you decide!</div>
+    </div>
+  </div>
+  <div class="chat-input-row">
+    <input type="text" id="chat-input" class="chat-input" placeholder="e.g. Which is better — iPhone 15 or Pixel 9?" onkeydown="handleChatKey(event)" />
+    <button class="chat-send" onclick="sendChat()">→</button>
+  </div>
+</div>
+
+<!-- Battle Mode Modal -->
+<div class="modal hidden" id="battle-modal">
+  <div class="modal-content glass-card battle-modal-content">
+    <button class="modal-close" onclick="closeBattleMode()">✕</button>
+    <div class="modal-header">
+      <h2 class="modal-title">⚔️ AI Battle Mode</h2>
+      <p class="modal-sub">Side-by-Side Comparison</p>
+    </div>
+    
+    <div class="battle-vs-container" id="battle-vs-hdr">
+      <div class="battle-side a" id="v-title-1">Device A</div>
+      <div class="battle-vs">VS</div>
+      <div class="battle-side b" id="v-title-2">Device B</div>
+    </div>
+
+    <div class="battle-layout">
+      <div class="battle-chart-wrap">
+        <canvas id="battleChart"></canvas>
+      </div>
+      
+      <div class="battle-specs-comparison" id="battle-specs-list">
+        <!-- JS will populate this with comparison rows -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

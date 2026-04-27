@@ -122,14 +122,14 @@ def _combine_weights(device_type: str, priorities: list[str], features: list[str
 # ─── Spec formatter ───────────────────────────────────────────────────────────
 
 def _build_specs(device_type: str, row: pd.Series) -> dict:
-    base = {"Price": f"₹{int(row['price']):,}"}
+    base = {"Price": f"₹{int(row['price'])}"}
     if device_type == "mobile":
         base.update({
             "RAM":     f"{int(row['ram'])} GB",
             "Storage": f"{int(row['storage'])} GB",
             "Camera":  f"{int(row['camera'])} MP",
             "Battery": f"{int(row['battery'])} mAh",
-            "Rating":  f"⭐ {float(row['rating']):.1f} / 5",
+            "Rating":  f"⭐ {round(float(row['rating']), 1)} / 5",
         })
     elif device_type == "laptop":
         base.update({
@@ -137,20 +137,20 @@ def _build_specs(device_type: str, row: pd.Series) -> dict:
             "Storage":    f"{int(row['storage'])} GB",
             "GPU (VRAM)": f"{int(row['vram'])} GB",
             "Processor":  str(row.get("processor", "N/A")),
-            "Display":    f"{float(row.get('display_size', 0)):.1f}\"",
-            "Weight":     f"{float(row.get('weight', 0)):.1f} kg",
+            "Display":    f"{round(float(row.get('display_size', 0)), 1)}\"",
+            "Weight":     f"{round(float(row.get('weight', 0)), 1)} kg",
             "Battery":    f"{int(row.get('battery_hours', 0))} hrs",
-            "Rating":     f"⭐ {float(row['rating']):.1f} / 5",
+            "Rating":     f"⭐ {round(float(row['rating']), 1)} / 5",
         })
     else:  # smartwatch
         base.update({
             "Battery Life":   f"{int(row['battery_life'])} days",
-            "Display":        f"{float(row['display_size']):.2f}\"",
+            "Display":        f"{round(float(row['display_size']), 2)}\"",
             "Health Score":   f"{int(row['health_features'])} / 10",
             "Waterproof":     f"IP{int(row['waterproof_rating'])}",
             "GPS":            "✅ Yes" if int(row.get("gps", 0)) else "❌ No",
             "Sleep Tracking": "✅ Yes" if int(row.get("sleep_tracking", 0)) else "❌ No",
-            "Rating":         f"⭐ {float(row['rating']):.1f} / 5",
+            "Rating":         f"⭐ {round(float(row['rating']), 1)} / 5",
         })
     return base
 
@@ -236,8 +236,8 @@ def _make_reason(priorities: list[str], device_type: str, row: pd.Series) -> str
         "waterproof": "water resistance",
     }
     chosen = " & ".join(p_labels.get(p, p) for p in priorities[:2])
-    rating = float(row.get("rating", 0))
-    return f"Top pick for {chosen}, rated ⭐ {rating:.1f}/5 by real users."
+    rating = round(float(row.get("rating", 0)), 1)
+    return f"Top pick for {chosen}, rated ⭐ {rating}/5 by real users."
 
 
 # ─── Main recommend function ──────────────────────────────────────────────────
@@ -304,8 +304,8 @@ def recommend(device_type: str, budget: float, priorities: list[str],
     # Brand bonus
     preferred_brand = brand.strip().lower()
 
-    # Sort by score, return top-3
-    top_idx = np.argsort(scores)[::-1][:3]
+    # Sort by score, return top-5
+    top_idx = np.argsort(scores)[::-1][:5]
 
     results = []
     for idx in top_idx:

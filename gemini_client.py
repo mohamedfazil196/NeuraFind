@@ -130,30 +130,30 @@ def get_realtime_recommendations(device_type, budget, priorities, brand="",
     spec_template = SPEC_TEMPLATES.get(device_type, SPEC_TEMPLATES["mobile"])
     radar_labels = RADAR_TEMPLATES.get(device_type, RADAR_TEMPLATES["mobile"])
 
-    prompt = f"""You are an expert tech advisor for the INDIAN market (2025-2026).
+    prompt = """You are an expert tech advisor for the INDIAN market (2025-2026).
 
 User Profile:
-- Device: {device_type}
-- Budget: ₹{budget:,.0f} (STRICT MAXIMUM — no device may exceed this price)
-- Priorities: {priorities_str}
-- Brand Preference: {brand if brand else "Any brand"}
-- Primary Usage: {usage}
-- Gaming Interest: {gaming}
-- Travel Frequency: {travel}
-- Camera Priority: {camera_priority}
+- Device: {DEVICE_TYPE}
+- Budget: ₹{BUDGET} (STRICT MAXIMUM — no device may exceed this price)
+- Priorities: {PRIORITIES}
+- Brand Preference: {BRAND}
+- Primary Usage: {USAGE}
+- Gaming Interest: {GAMING}
+- Travel Frequency: {TRAVEL}
+- Camera Priority: {CAMERA}
 
 TASK: Return a JSON object with exactly 3 keys: "recommendations", "personality", "tradeoff".
 
 ═══ RECOMMENDATIONS ═══
-Find exactly 3 REAL {device_type} devices currently sold in India.
+Find exactly 5 REAL {DEVICE_TYPE} devices currently sold in India.
 
 Rules:
-- All prices MUST be current Indian retail prices (Amazon.in / Flipkart) and UNDER ₹{budget:,.0f}
+- All prices MUST be current Indian retail prices (Amazon.in / Flipkart) and UNDER ₹{BUDGET}
 - For budgets above ₹50,000 (mobiles): recommend FLAGSHIP / PREMIUM devices like Samsung Galaxy S-series, Apple iPhone, Google Pixel Pro, OnePlus flagships, etc.
 - For budgets ₹20,000-50,000: recommend best mid-range (Nothing Phone, OnePlus Nord, Pixel A, Samsung A-series, etc.)
 - For budgets below ₹20,000: recommend best budget options
 - Only recommend devices that ACTUALLY EXIST and are CURRENTLY AVAILABLE to buy in India
-- Vary brands across the 3 picks if possible
+- Vary brands across the 5 picks as much as possible
 - Sort by best match first (highest score)
 
 Each recommendation object:
@@ -163,34 +163,25 @@ Each recommendation object:
   "price": 49999,
   "score": 92.5,
   "confidence": 90.0,
-  "specs": {{ {spec_template.strip()} }},
+  "specs": {{ {SPEC_TEMPLATE} }},
   "reason": "One sentence why recommended based on user priorities",
   "gemini_explanation": "2-3 sentences detailed explanation referencing user's specific needs",
-  "radar": {{ "labels": {radar_labels}, "values": [0-100 integers for each] }},
+  "radar": {{ "labels": {RADAR_LABELS}, "values": [0-100 integers for each] }},
   "is_live_gemini": true
 }}
 
-Score guidelines: 88-96 range (be realistic, not always 98+). Confidence: 85-95.
-
 ═══ PERSONALITY ═══
-Based on user preferences above, identify ONE personality:
-- Gamer 🎮 (gaming matters)
-- Traveler ✈️ (travel / battery / portability)
-- Student 📚 (budget-conscious, general use)
-- Creator 🎨 (camera / display is top priority)
-- Professional 💼 (performance / productivity)
-- Casual User 😌 (no strong preference)
-
+Analyze the user's priorities and usage to assign them a personality (e.g., Gamer, Photographer, Student, etc.)
 Return: {{ "type": "Label Emoji", "explanation": "2-3 sentences explaining why and how recommendations match" }}
 
 ═══ TRADEOFF ═══
-Could the user get significantly better devices by spending ₹2,000-5,000 more?
-Return: {{ "should_upgrade": bool, "extra_amount": 3000, "improvement": "what improves", "advice": "1-2 sentence advice" }}
+ALWAYS suggest a potential upgrade. Even if the current budget is high, find what an extra ₹1,500 to ₹6,000 could get them (e.g., better build, slightly better sensor, more storage, or a next-tier model). 
+Return: {{ "should_upgrade": true, "extra_amount": 3500, "improvement": "one specific feature improvement", "advice": "1-2 sentence compelling advice" }}
 
 ═══ OUTPUT ═══
 Return ONLY valid JSON. No markdown, no code fences, no explanation text.
 {{
-  "recommendations": [ ...3 objects... ],
+  "recommendations": [ ...5 objects... ],
   "personality": {{ "type": "...", "explanation": "..." }},
   "tradeoff": {{ "should_upgrade": true, "extra_amount": 3000, "improvement": "...", "advice": "..." }}
 }}"""
@@ -217,13 +208,21 @@ Return ONLY valid JSON. No markdown, no code fences, no explanation text.
 
         result = json.loads(text)
 
-        # Validate structure
-        if "recommendations" not in result:
-            return None
-        if not isinstance(result["recommendations"], list):
-            return None
-        if len(result["recommendations"]) == 0:
-            return None
+        # Ensure personality and tradeoff exist and are well-formed
+        if "tradeoff" not in result or not result["tradeoff"].get("advice"):
+            import random
+            extra = random.choice([2000, 3000, 4500, 5000])
+            result["tradeoff"] = {
+                "should_upgrade": True,
+                "extra_amount": extra,
+                "improvement": "Overall build quality and camera processing",
+                "advice": f"Increasing your budget by just ₹{int(extra)} would allow you to step into the next performance tier for better longevity."
+            }
+        
+        if "personality" not in result or not result["personality"].get("type"):
+            result["personality"] = {"type": "Casual User 😌", "explanation": "A balanced user with no extreme preferences."}
+
+        # Validate recommendations
 
         # Ensure all recommendations have required fields
         radar_default = json.loads(radar_labels)
@@ -268,12 +267,12 @@ def explain_recommendation(device_name: str, specs: dict, user_prefs: dict,
     prefs_str = ", ".join(f"{k}: {v}" for k, v in user_prefs.items() if k != "brand")
 
     prompt = (
-        f"You are an expert tech advisor. Explain in exactly 2-3 concise sentences "
-        f"why the {device_type} '{device_name}' (match score: {score:.1f}%) is a great choice "
-        f"for a user with these preferences: {prefs_str}. "
-        f"The device specs are: {specs_str}. "
-        f"Be specific, enthusiastic, and mention real value propositions. "
-        f"Do NOT use bullet points. Plain paragraph only."
+        "You are an expert tech advisor. Explain in exactly 2-3 concise sentences " +
+        "why the " + str(device_type) + " '" + str(device_name) + "' (match score: " + str(round(score, 1)) + "%) is a great choice " +
+        "for a user with these preferences: " + str(prefs_str) + ". " +
+        "The device specs are: " + str(specs_str) + ". " +
+        "Be specific, enthusiastic, and mention real value propositions. " +
+        "Do NOT use bullet points. Plain paragraph only."
     )
 
     try:
@@ -289,11 +288,11 @@ def _fallback_explanation(device_name: str, specs: dict, user_prefs: dict,
     budget = float(user_prefs.get("budget", 0))
     price_str = specs.get("Price", "")
     top_specs = list(specs.items())[1:3]
-    spec_highlight = " and ".join(f"{k} of {v}" for k, v in top_specs)
+    spec_highlight = " and ".join(str(k) + " of " + str(v) for k, v in top_specs)
     return (
-        f"{device_name} scores {score:.1f}% compatibility with your requirements, "
-        f"offering {spec_highlight}. "
-        f"It represents excellent value within your ₹{int(budget):,} budget."
+        str(device_name) + " scores " + str(round(score, 1)) + "% compatibility with your requirements, " +
+        "offering " + str(spec_highlight) + ". " +
+        "It represents excellent value within your ₹" + str(int(budget)) + " budget."
     )
 
 
@@ -348,7 +347,7 @@ def market_insight(category: str, budget: float) -> dict:
     if model is None:
         return _fallback_market_insight(category, budget)
 
-    budget_label = f"₹{int(budget):,}" if budget > 0 else "any budget"
+    budget_label = f"₹{int(budget)}" if budget > 0 else "any budget"
 
     prompt = f"""You are a senior tech market analyst. For the {category} market at {budget_label} budget in India (2025):
 
@@ -401,8 +400,43 @@ def _fallback_market_insight(category: str, budget: float) -> dict:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  5.  LIVE AI PICK  (legacy — kept for ML-fallback path)
+#  6.  STANDALONE TRADEOFF & PERSONALITY (for Fallback path)
 # ═════════════════════════════════════════════════════════════════════════════
+
+def get_standalone_insights(device_type, budget, priorities, top_device_name):
+    """
+    Generate personality and tradeoff advice specifically for the fallback path.
+    """
+    model = _get_model()
+    if model is None:
+        return {
+            "personality": {"type": "Smart Buyer 💡", "explanation": "You've chosen a balanced path based on market data."},
+            "tradeoff": {"should_upgrade": True, "extra_amount": 3000, "improvement": "Better secondary cameras", "advice": "Consider a small bump to get a more versatile lens setup."}
+        }
+
+    prompt = """For a {DEVICE} search in India:
+User Budget: ₹{BUDGET}
+Priorities: {PRIORITIES}
+Top Recommended: {TOP}
+
+Return JSON with "personality" and "tradeoff":
+- "personality": {{ "type": "Emoji Label", "explanation": "2 sentences" }}
+- "tradeoff": {{ "should_upgrade": true, "extra_amount": 3500, "improvement": "...", "advice": "..." }}
+"""
+    prompt = prompt.replace("{DEVICE}", str(device_type))
+    prompt = prompt.replace("{BUDGET}", str(int(budget)))
+    prompt = prompt.replace("{PRIORITIES}", ", ".join(priorities))
+    prompt = prompt.replace("{TOP}", str(top_device_name))
+    try:
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        if "```" in text: text = text.split("```")[1].replace("json","")
+        return json.loads(text)
+    except:
+        return {
+            "personality": {"type": "Smart Buyer 💡", "explanation": "You've chosen a balanced path based on market data."},
+            "tradeoff": {"should_upgrade": True, "extra_amount": 2500, "improvement": "Extended battery life", "advice": "A slight budget increase usually yields much better power efficiency."}
+        }
 
 def get_live_pick(device_type: str, budget: float, priorities: list[str], brand: str, exclude_names: list[str]) -> list[dict]:
     """Uses Gemini to find real-world devices NOT in the dataset."""

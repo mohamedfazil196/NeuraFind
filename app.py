@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from model import recommend
 from gemini_client import (
     explain_recommendation, chat as gemini_chat, market_insight,
-    get_realtime_recommendations, get_live_pick
+    get_realtime_recommendations, get_live_pick, get_standalone_insights
 )
 
 # Initialize Supabase (optional, falls back to memory if not configured)
@@ -27,9 +27,11 @@ if SUPABASE_URL and SUPABASE_KEY:
     try:
         from supabase import create_client
         supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        print("[NeuraFind] ✅ Supabase connected for persistent history.")
+        print(f"[NeuraFind] ✅ Supabase connected to {SUPABASE_URL}")
     except Exception as e:
-        print(f"[NeuraFind] ⚠️ Supabase init error: {e}")
+        print(f"[NeuraFind] ❌ Supabase init error: {e}")
+else:
+    print("[NeuraFind] ⚠️ Supabase credentials missing. History will be temporary (in-memory).")
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(32)
@@ -55,7 +57,7 @@ def _save_history(user_id, device_type, budget, priorities, results):
         "user_id": user_id,
         "device_type": device_type,
         "budget": budget,
-        "priorities": priorities,
+        "priorities": priorities if isinstance(priorities, list) else [],
         "top_result": top_result,
         "score": score,
         "result_count": len(results)
@@ -63,18 +65,20 @@ def _save_history(user_id, device_type, budget, priorities, results):
 
     if supabase_client:
         try:
-            supabase_client.table("search_history").insert(entry).execute()
+            print(f"[NeuraFind] Saving history for user {user_id}...")
+            res = supabase_client.table("search_history").insert(entry).execute()
+            print(f"[NeuraFind] ✅ History saved to Supabase: {res.data}")
         except Exception as e:
-            print(f"[NeuraFind] ⚠️ Failed to save history to Supabase: {e}")
+            print(f"[NeuraFind] ❌ Failed to save history to Supabase: {e}")
     else:
         # Fallback to memory
         if user_id not in _memory_history:
             _memory_history[user_id] = []
-        # Add timestamp manually for memory
         import datetime
         entry["created_at"] = datetime.datetime.now().isoformat()
         _memory_history[user_id].insert(0, entry)
         _memory_history[user_id] = _memory_history[user_id][:20]
+        print(f"[NeuraFind] ⚠️ History saved to memory for user {user_id}")
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -165,12 +169,15 @@ def get_recommendations():
         results = results_subset
         results.sort(key=lambda x: x.get("score", 0), reverse=True)
 
+        # Generate insights for fallback path (V2.1)
+        insights = get_standalone_insights(device_type, budget, priorities, results[0]["name"] if results else "N/A")
+
         _save_history(user_id, device_type, budget, priorities, results)
 
         resp = make_response(jsonify({
             "recommendations": results,
-            "personality":     {},
-            "tradeoff":        {},
+            "personality":     insights.get("personality", {}),
+            "tradeoff":        insights.get("tradeoff", {}),
             "ai_powered":      True,
             "source":          "dataset",
         }))
@@ -206,9 +213,10 @@ def market_insight_endpoint():
 def history_endpoint():
     user_id = _get_or_create_user_id(request)
     
+    formatted_history = []
     if supabase_client:
         try:
-            # Query history from Supabase for this user
+            print(f"[NeuraFind] Fetching history for user {user_id}...")
             response = supabase_client.table("search_history") \
                 .select("*") \
                 .eq("user_id", user_id) \
@@ -217,8 +225,6 @@ def history_endpoint():
                 .execute()
             history = response.data
             
-            # Format the output to match what the frontend expects
-            formatted_history = []
             for item in history:
                 formatted_history.append({
                     "device_type": item["device_type"],
@@ -228,14 +234,16 @@ def history_endpoint():
                     "score": item["score"],
                     "count": item["result_count"]
                 })
-            return jsonify({"history": formatted_history})
-            
         except Exception as e:
-            print(f"[NeuraFind] ⚠️ Failed to load history from Supabase: {e}")
-            return jsonify({"history": []})
+            print(f"[NeuraFind] ❌ Failed to load history from Supabase: {e}")
     else:
-        # Fallback memory
-        return jsonify({"history": _memory_history.get(user_id, [])})
+        formatted_history = _memory_history.get(user_id, [])
+
+    resp = make_response(jsonify({"history": formatted_history}))
+    # Ensure the user gets the cookie if they didn't have it (e.g. direct access)
+    if not request.cookies.get("neurafind_anon_id"):
+        resp.set_cookie("neurafind_anon_id", user_id, max_age=60*60*24*365)
+    return resp
 
 
 if __name__ == "__main__":

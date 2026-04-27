@@ -4,6 +4,7 @@
 const state = {
   device: null, budget: 25000, priorities: new Set(),
   results: [], chatHistory: [], insightLoaded: false, radarCharts: {},
+  compareSelection: [], // indices of cards selected for comparison (max 2)
 };
 
 // ─── Device Configurations ───────────────────────────────────────────────────
@@ -157,6 +158,9 @@ async function runRecommend() {
     if (data.error) { document.getElementById("results-list").innerHTML = `<div class="empty-state">❌ Error: ${data.error}</div>`; return; }
 
     state.results = data.recommendations;
+    state.compareSelection = [];
+    updateCompareBtn();
+
     // Source badge
     const srcBadge = document.getElementById("source-badge");
     srcBadge.textContent = data.source === "realtime" ? "🔴 LIVE · Real-Time" : "📊 Dataset";
@@ -164,7 +168,6 @@ async function runRecommend() {
 
     document.getElementById("results-badge").textContent = `${data.recommendations.length} Top Picks`;
     document.getElementById("results-badge").classList.remove("hidden");
-    document.getElementById("btn-compare").style.display = data.recommendations.length > 1 ? "inline-block" : "none";
 
     // Render AI Insight cards (Personality + Tradeoff)
     renderAIInsights(data.personality, data.tradeoff);
@@ -212,22 +215,28 @@ function renderResults(recs) {
   const list = document.getElementById("results-list"); list.innerHTML = "";
   Object.values(state.radarCharts).forEach(c => c.destroy()); state.radarCharts = {};
   const ranks = [
-    { label: "🥇 First Choice", class: "rank-1" },
-    { label: "🥈 Excellent Match", class: "rank-2" },
-    { label: "🥉 Great Value", class: "rank-3" }
+    { label: "🥇 Best Match",      class: "rank-1" },
+    { label: "🥈 Excellent Pick",  class: "rank-2" },
+    { label: "🥉 Great Value",     class: "rank-3" },
+    { label: "🏅 Strong Choice",   class: "rank-4" },
+    { label: "⭐ Solid Pick",       class: "rank-5" },
   ];
 
   recs.forEach((rec, i) => {
-    const r = ranks[i] || { label: `Pick #${i+1}`, class: "rank-4" };
-    const specsHtml = Object.entries(rec.specs).map(([k,v]) => `<div class="spec-item"><div class="spec-key">${k}</div><div class="spec-val">${v}</div></div>`).join("");
-    const geminiHtml = rec.gemini_explanation ? `<div class="gemini-box"><div class="gemini-box-hdr">⚡ AI Insight</div><p>${rec.gemini_explanation}</p></div>` : "";
+    const r = ranks[i] || { label: `Pick #${i+1}`, class: "rank-5" };
+    const specsHtml = Object.entries(rec.specs).map(([k,v]) =>
+      `<div class="spec-item"><div class="spec-key">${k}</div><div class="spec-val">${v}</div></div>`
+    ).join("");
+    const geminiHtml = rec.gemini_explanation
+      ? `<div class="gemini-box"><div class="gemini-box-hdr">⚡ AI Insight</div><p>${rec.gemini_explanation}</p></div>` : "";
     const chartId = `radar-${i}`;
     const liveBadge = rec.is_live_gemini ? `<span class="live-badge">🔴 LIVE AI PICK</span>` : "";
     const amazonUrl = `https://www.amazon.in/s?k=${encodeURIComponent(rec.name)}`;
     const flipkartUrl = `https://www.flipkart.com/search?q=${encodeURIComponent(rec.name)}`;
 
     const card = document.createElement("div");
-    card.className = "result-card"; card.style.animationDelay = `${i*0.15}s`;
+    card.className = "result-card"; card.style.animationDelay = `${i*0.12}s`;
+    card.setAttribute("data-idx", i);
     card.innerHTML = `
       <div class="card-rank-strip">
         <div class="rank-badge"><span class="rank-emoji">${r.label.split(" ")[0]}</span><span class="rank-label">${r.label.split(" ").slice(1).join(" ")} ${liveBadge}</span></div>
@@ -252,9 +261,12 @@ function renderResults(recs) {
           <a href="${amazonUrl}" target="_blank" class="buy-btn amazon-btn">🛒 Buy on Amazon</a>
           <a href="${flipkartUrl}" target="_blank" class="buy-btn flipkart-btn">🛍️ Buy on Flipkart</a>
         </div>
+        <button class="compare-select-btn" id="cmp-btn-${i}" onclick="toggleCompareSelect(${i})">
+          ⚕️ Select to Compare
+        </button>
       </div>`;
     list.appendChild(card);
-    setTimeout(() => { document.getElementById(`bar-${i}`).style.width = `${rec.score}%`; }, 100+i*150);
+    setTimeout(() => { const b = document.getElementById(`bar-${i}`); if(b) b.style.width = `${rec.score}%`; }, 100+i*120);
     setTimeout(() => drawRadar(chartId, rec.radar, i), 200+i*100);
   });
 }
@@ -312,9 +324,15 @@ function exportPDF() {
 async function loadHistory() {
   try {
     const res = await fetch("/history"); const data = await res.json();
-    const c = document.getElementById("history-list"); if(!data.history?.length) return;
+    const c = document.getElementById("history-list"); 
+    if(!data.history || data.history.length === 0) {
+      c.innerHTML = '<div class="empty-state">No history yet — run your first search!</div>';
+      return;
+    }
     c.innerHTML = data.history.map((h,i) => `<div class="history-card" style="animation-delay:${i*0.1}s"><div class="history-icon">${DEVICE_ICONS[h.device_type]||"⚡"}</div><div class="history-info"><div class="history-name">Top: ${h.top_result}</div><div class="history-meta">₹${parseInt(h.budget).toLocaleString("en-IN")} · ${h.priorities.join(", ")||"No priorities"}</div></div><div class="history-score">${h.score}%</div></div>`).join("");
-  } catch(e){}
+  } catch(e){
+    console.error("History load error:", e);
+  }
 }
 
 // ─── Chat ────────────────────────────────────────────────────────────────────
@@ -335,24 +353,89 @@ function appendChat(role,text) { const c=document.getElementById("chat-messages"
 function appendTyping() { const c=document.getElementById("chat-messages"),d=document.createElement("div"); d.id="chat-typing"; d.className="chat-msg bot chat-typing"; d.innerHTML=`<div class="msg-bubble"><div class="dot-dot"></div><div class="dot-dot"></div><div class="dot-dot"></div></div>`; c.appendChild(d); c.scrollTop=c.scrollHeight; }
 function removeTyping() { document.getElementById("chat-typing")?.remove(); }
 
+// ─── Compare Selection ────────────────────────────────────────────────────────
+function toggleCompareSelect(idx) {
+  const btn = document.getElementById(`cmp-btn-${idx}`);
+  const card = btn.closest(".result-card");
+  const alreadySelected = state.compareSelection.includes(idx);
+
+  if (alreadySelected) {
+    state.compareSelection = state.compareSelection.filter(i => i !== idx);
+    btn.innerHTML = `&#9878;&#65039; Select to Compare`;
+    btn.classList.remove("compare-select-btn--active");
+    card.classList.remove("result-card--selected");
+  } else {
+    if (state.compareSelection.length >= 2) {
+      const orig = btn.innerHTML;
+      btn.innerHTML = `&#9888;&#65039; Max 2 selected`;
+      setTimeout(() => { btn.innerHTML = orig; }, 1400);
+      return;
+    }
+    state.compareSelection.push(idx);
+    btn.innerHTML = `&#10003; Selected`;
+    btn.classList.add("compare-select-btn--active");
+    card.classList.add("result-card--selected");
+  }
+  updateCompareBtn();
+}
+
+function updateCompareBtn() {
+  const btn = document.getElementById("btn-compare");
+  const n = state.compareSelection.length;
+  if (n === 0) {
+    btn.innerHTML = `&#9876;&#65039; Compare`;
+    btn.style.display = state.results.length > 1 ? "inline-flex" : "none";
+    btn.classList.remove("btn-compare--ready");
+  } else if (n === 1) {
+    btn.innerHTML = `&#9876;&#65039; Compare (1/2)`;
+    btn.style.display = "inline-flex";
+    btn.classList.remove("btn-compare--ready");
+  } else {
+    btn.innerHTML = `&#9876;&#65039; Compare Selected &#8594;`;
+    btn.style.display = "inline-flex";
+    btn.classList.add("btn-compare--ready");
+  }
+}
+
 // ─── Battle Mode ─────────────────────────────────────────────────────────────
 let battleChartInstance = null;
 function openBattleMode() {
-  if(state.results.length<2) return;
-  const a=state.results[0], b=state.results[1];
-  document.getElementById('v-title-1').textContent=a.name; document.getElementById('v-title-2').textContent=b.name;
-  const sd=document.getElementById('battle-specs-list'), allKeys=Object.keys(a.specs);
-  sd.innerHTML = allKeys.map(key=>`<div class="spec-battle-row"><div class="spec-battle-label">${key}</div><div class="spec-battle-values"><div class="spec-val a">${a.specs[key]||'N/A'}</div><div class="spec-sep"></div><div class="spec-val b">${b.specs[key]||'N/A'}</div></div></div>`).join("");
+  let idxA, idxB;
+  if (state.compareSelection.length === 2) {
+    [idxA, idxB] = state.compareSelection;
+  } else {
+    if (state.results.length < 2) return;
+    idxA = 0; idxB = 1;
+  }
+  const a = state.results[idxA], b = state.results[idxB];
+  document.getElementById('v-title-1').textContent = a.name;
+  document.getElementById('v-title-2').textContent = b.name;
+  const sd = document.getElementById('battle-specs-list');
+  const allKeys = Object.keys(a.specs);
+  sd.innerHTML = allKeys.map(key => `
+    <div class="spec-battle-row">
+      <div class="spec-battle-label">${key}</div>
+      <div class="spec-battle-values">
+        <div class="spec-val a">${a.specs[key]||'N/A'}</div>
+        <div class="spec-sep"></div>
+        <div class="spec-val b">${b.specs[key]||'N/A'}</div>
+      </div>
+    </div>`).join("");
   const ctx = document.getElementById('battleChart').getContext('2d');
-  if(battleChartInstance) battleChartInstance.destroy();
+  if (battleChartInstance) battleChartInstance.destroy();
   document.getElementById('battle-modal').classList.remove('hidden');
   battleChartInstance = new Chart(ctx, {
-    type:"radar",
-    data:{ labels:a.radar.labels, datasets:[
-      {label:a.name,data:a.radar.values,borderColor:"rgba(108,99,255,0.8)",backgroundColor:"rgba(108,99,255,0.3)",borderWidth:2,pointBackgroundColor:"rgba(108,99,255,1)"},
-      {label:b.name,data:b.radar.values,borderColor:"rgba(0,245,196,0.8)",backgroundColor:"rgba(0,245,196,0.3)",borderWidth:2,pointBackgroundColor:"rgba(0,245,196,1)"}
+    type: "radar",
+    data: { labels: a.radar.labels, datasets: [
+      { label: a.name, data: a.radar.values, borderColor: "rgba(108,99,255,0.9)", backgroundColor: "rgba(108,99,255,0.2)", borderWidth: 2.5, pointBackgroundColor: "rgba(108,99,255,1)", pointRadius: 4 },
+      { label: b.name, data: b.radar.values, borderColor: "rgba(0,245,196,0.9)", backgroundColor: "rgba(0,245,196,0.15)", borderWidth: 2.5, pointBackgroundColor: "rgba(0,245,196,1)", pointRadius: 4 }
     ]},
-    options:{ animation:{duration:1000,easing:"easeOutQuart"}, responsive:true, maintainAspectRatio:false, plugins:{legend:{display:true,labels:{color:"#f0f4ff",font:{family:"Inter",size:12}}}}, scales:{r:{min:0,max:100,angleLines:{color:"rgba(255,255,255,0.1)"},grid:{color:"rgba(255,255,255,0.06)"},ticks:{display:false},pointLabels:{color:"#9aabcf",font:{size:10,family:"Inter"}}}}}
+    options: {
+      animation: { duration: 900, easing: "easeOutQuart" },
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: true, labels: { color: "#f0f4ff", font: { family: "Inter", size: 13 }, padding: 20 }}},
+      scales: { r: { min: 0, max: 100, angleLines: { color: "rgba(255,255,255,0.1)" }, grid: { color: "rgba(255,255,255,0.06)" }, ticks: { display: false }, pointLabels: { color: "#9aabcf", font: { size: 11, family: "Inter" }}}}
+    }
   });
 }
 function closeBattleMode() { document.getElementById('battle-modal').classList.add('hidden'); }

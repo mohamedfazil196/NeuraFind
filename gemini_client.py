@@ -1,31 +1,255 @@
 """
-gemini_client.py — Google Gemini AI Integration
-Provides three capabilities:
-  1. explain_recommendation → Natural language explanation for a device match
-  2. chat                   → Conversational AI assistant for device buying advice
-  3. market_insight         → Category-level AI market analysis
+gemini_client.py — Google Gemini AI Integration (V2 — Real-Time Engine)
+Now serves as the PRIMARY recommendation engine with real-time market data.
+
+Capabilities:
+  1. get_realtime_recommendations → Full AI-powered device matching + personality + tradeoff
+  2. explain_recommendation       → Natural language explanation (fallback path)
+  3. chat                         → Conversational AI assistant
+  4. market_insight               → Category-level AI market analysis
+  5. get_live_pick                → Single live AI pick (legacy fallback)
 """
 
 import os
+import json
+import time
+import hashlib
 import google.generativeai as genai
 from dotenv import load_dotenv
 
-from dotenv import load_dotenv
+
+# ─── Response Cache (saves free-tier API quota) ──────────────────────────────
+
+_response_cache = {}
+CACHE_TTL = 300  # 5 minutes
+
+
+def _cache_key(*args):
+    return hashlib.md5(str(args).encode()).hexdigest()
+
+
+def _get_cached(key):
+    if key in _response_cache:
+        val, ts = _response_cache[key]
+        if time.time() - ts < CACHE_TTL:
+            return val
+        del _response_cache[key]
+    return None
+
+
+def _set_cached(key, val):
+    if len(_response_cache) > 50:
+        oldest = min(_response_cache, key=lambda k: _response_cache[k][1])
+        del _response_cache[oldest]
+    _response_cache[key] = (val, time.time())
+
+
+# ─── Model ────────────────────────────────────────────────────────────────────
 
 def _get_model():
     """Lazily initialise and return the Gemini model."""
     load_dotenv(override=True)
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    
+
     if not api_key or api_key == "your_gemini_api_key_here" or api_key.startswith("your_"):
         return None
-        
+
     genai.configure(api_key=api_key)
-    # Using 2.5-flash-lite to bypass strict quota limits
+    # Using 2.5-flash-lite to stay within free tier limits
     return genai.GenerativeModel("gemini-2.5-flash-lite")
 
 
-# ─── 1. Device Recommendation Explanation ────────────────────────────────────
+# ─── Spec & Radar Templates per device type ──────────────────────────────────
+
+SPEC_TEMPLATES = {
+    "mobile": """
+        "Price": "₹XX,XXX",
+        "RAM": "X GB",
+        "Storage": "XXX GB",
+        "Camera": "XXX MP (main sensor details)",
+        "Battery": "XXXX mAh",
+        "Display": "X.X inch AMOLED/LCD XXXHz",
+        "Processor": "Snapdragon/Dimensity/Apple XX"
+    """,
+    "laptop": """
+        "Price": "₹X,XX,XXX",
+        "RAM": "XX GB",
+        "Storage": "XXX GB SSD",
+        "GPU": "NVIDIA/Intel/Apple XX",
+        "Processor": "Intel/AMD/Apple XX",
+        "Display": "XX.X inch IPS/OLED XXXHz",
+        "Battery": "XX hours",
+        "Weight": "X.X kg"
+    """,
+    "smartwatch": """
+        "Price": "₹XX,XXX",
+        "Battery Life": "X days",
+        "Display": "X.XX inch AMOLED/LCD",
+        "Health Features": "ECG, SpO2, HR etc.",
+        "Water Resistance": "IP68/5ATM/etc",
+        "GPS": "Yes/No",
+        "Sleep Tracking": "Yes/No"
+    """,
+}
+
+RADAR_TEMPLATES = {
+    "mobile": '["Performance", "Camera", "Battery", "Display", "Value", "Design"]',
+    "laptop": '["Performance", "GPU Power", "Battery", "Display", "Portability", "Value"]',
+    "smartwatch": '["Health", "Battery", "Fitness", "Display", "Design", "Value"]',
+}
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  1.  REAL-TIME RECOMMENDATIONS  (PRIMARY ENGINE — V2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def get_realtime_recommendations(device_type, budget, priorities, brand="",
+                                  usage="general", gaming="no", travel="no",
+                                  camera_priority="medium"):
+    """
+    PRIMARY recommendation engine.  Single Gemini call that returns:
+      - 3 real, current-market device recommendations
+      - User personality analysis
+      - Budget tradeoff advice
+
+    Returns dict: { recommendations, personality, tradeoff }
+    Returns None if Gemini is unavailable (caller should fall back to ML).
+    """
+    cache_k = _cache_key("realtime_v2", device_type, budget,
+                          tuple(sorted(priorities)), brand,
+                          usage, gaming, travel, camera_priority)
+    cached = _get_cached(cache_k)
+    if cached:
+        return cached
+
+    model = _get_model()
+    if model is None:
+        return None
+
+    priorities_str = ", ".join(priorities) if priorities else "balanced all-round performance"
+    spec_template = SPEC_TEMPLATES.get(device_type, SPEC_TEMPLATES["mobile"])
+    radar_labels = RADAR_TEMPLATES.get(device_type, RADAR_TEMPLATES["mobile"])
+
+    prompt = f"""You are an expert tech advisor for the INDIAN market (2025-2026).
+
+User Profile:
+- Device: {device_type}
+- Budget: ₹{budget:,.0f} (STRICT MAXIMUM — no device may exceed this price)
+- Priorities: {priorities_str}
+- Brand Preference: {brand if brand else "Any brand"}
+- Primary Usage: {usage}
+- Gaming Interest: {gaming}
+- Travel Frequency: {travel}
+- Camera Priority: {camera_priority}
+
+TASK: Return a JSON object with exactly 3 keys: "recommendations", "personality", "tradeoff".
+
+═══ RECOMMENDATIONS ═══
+Find exactly 3 REAL {device_type} devices currently sold in India.
+
+Rules:
+- All prices MUST be current Indian retail prices (Amazon.in / Flipkart) and UNDER ₹{budget:,.0f}
+- For budgets above ₹50,000 (mobiles): recommend FLAGSHIP / PREMIUM devices like Samsung Galaxy S-series, Apple iPhone, Google Pixel Pro, OnePlus flagships, etc.
+- For budgets ₹20,000-50,000: recommend best mid-range (Nothing Phone, OnePlus Nord, Pixel A, Samsung A-series, etc.)
+- For budgets below ₹20,000: recommend best budget options
+- Only recommend devices that ACTUALLY EXIST and are CURRENTLY AVAILABLE to buy in India
+- Vary brands across the 3 picks if possible
+- Sort by best match first (highest score)
+
+Each recommendation object:
+{{
+  "name": "Exact full model name",
+  "brand": "Brand name",
+  "price": 49999,
+  "score": 92.5,
+  "confidence": 90.0,
+  "specs": {{ {spec_template.strip()} }},
+  "reason": "One sentence why recommended based on user priorities",
+  "gemini_explanation": "2-3 sentences detailed explanation referencing user's specific needs",
+  "radar": {{ "labels": {radar_labels}, "values": [0-100 integers for each] }},
+  "is_live_gemini": true
+}}
+
+Score guidelines: 88-96 range (be realistic, not always 98+). Confidence: 85-95.
+
+═══ PERSONALITY ═══
+Based on user preferences above, identify ONE personality:
+- Gamer 🎮 (gaming matters)
+- Traveler ✈️ (travel / battery / portability)
+- Student 📚 (budget-conscious, general use)
+- Creator 🎨 (camera / display is top priority)
+- Professional 💼 (performance / productivity)
+- Casual User 😌 (no strong preference)
+
+Return: {{ "type": "Label Emoji", "explanation": "2-3 sentences explaining why and how recommendations match" }}
+
+═══ TRADEOFF ═══
+Could the user get significantly better devices by spending ₹2,000-5,000 more?
+Return: {{ "should_upgrade": bool, "extra_amount": 3000, "improvement": "what improves", "advice": "1-2 sentence advice" }}
+
+═══ OUTPUT ═══
+Return ONLY valid JSON. No markdown, no code fences, no explanation text.
+{{
+  "recommendations": [ ...3 objects... ],
+  "personality": {{ "type": "...", "explanation": "..." }},
+  "tradeoff": {{ "should_upgrade": true, "extra_amount": 3000, "improvement": "...", "advice": "..." }}
+}}"""
+
+    try:
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+
+        # Strip markdown code fences if present
+        if text.startswith("```"):
+            lines = text.split("\n")
+            # Remove first and last ``` lines
+            start = 1
+            if lines[0].strip().startswith("```"):
+                start = 1
+            end = len(lines)
+            for i in range(len(lines) - 1, 0, -1):
+                if lines[i].strip() == "```":
+                    end = i
+                    break
+            text = "\n".join(lines[start:end]).strip()
+            if text.startswith("json"):
+                text = text[4:].strip()
+
+        result = json.loads(text)
+
+        # Validate structure
+        if "recommendations" not in result:
+            return None
+        if not isinstance(result["recommendations"], list):
+            return None
+        if len(result["recommendations"]) == 0:
+            return None
+
+        # Ensure all recommendations have required fields
+        radar_default = json.loads(radar_labels)
+        for rec in result["recommendations"]:
+            rec.setdefault("is_live_gemini", True)
+            rec.setdefault("confidence", 90.0)
+            rec.setdefault("score", 85.0)
+            rec.setdefault("brand", "Unknown")
+            rec.setdefault("radar", {"labels": radar_default, "values": [80] * len(radar_default)})
+
+        # Ensure personality and tradeoff exist
+        result.setdefault("personality", {"type": "Casual User 😌", "explanation": "A balanced user with no extreme preferences."})
+        result.setdefault("tradeoff", {"should_upgrade": False, "extra_amount": 0, "improvement": "", "advice": "Your budget is well-optimised."})
+
+        _set_cached(cache_k, result)
+        return result
+
+    except Exception as e:
+        print(f"[NeuraFind] Real-time recommendation error: {e}")
+        import traceback; traceback.print_exc()
+        return None
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  2.  DEVICE EXPLANATION  (used by fallback path)
+# ═════════════════════════════════════════════════════════════════════════════
 
 def explain_recommendation(device_name: str, specs: dict, user_prefs: dict,
                             device_type: str, score: float) -> str:
@@ -73,7 +297,9 @@ def _fallback_explanation(device_name: str, specs: dict, user_prefs: dict,
     )
 
 
-# ─── 2. Conversational Chat Assistant ─────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════════════
+#  3.  CONVERSATIONAL CHAT ASSISTANT
+# ═════════════════════════════════════════════════════════════════════════════
 
 def chat(conversation_history: list[dict], user_message: str) -> str:
     """
@@ -108,7 +334,9 @@ def chat(conversation_history: list[dict], user_message: str) -> str:
         return f"Sorry, I encountered an error: {str(e)}"
 
 
-# ─── 3. Market Insight / Buying Guide ─────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════════════
+#  4.  MARKET INSIGHT / BUYING GUIDE
+# ═════════════════════════════════════════════════════════════════════════════
 
 def market_insight(category: str, budget: float) -> dict:
     """
@@ -140,7 +368,6 @@ Respond with ONLY valid JSON, no markdown, no explanation."""
             text = text.split("```")[1]
             if text.startswith("json"):
                 text = text[4:]
-        import json
         return json.loads(text.strip())
     except Exception:
         return _fallback_market_insight(category, budget)
@@ -173,7 +400,9 @@ def _fallback_market_insight(category: str, budget: float) -> dict:
     return insights.get(cat, insights["mobile"])
 
 
-# ─── 4. Live AI Recommendation (Outside Dataset) ──────────────────────────────
+# ═════════════════════════════════════════════════════════════════════════════
+#  5.  LIVE AI PICK  (legacy — kept for ML-fallback path)
+# ═════════════════════════════════════════════════════════════════════════════
 
 def get_live_pick(device_type: str, budget: float, priorities: list[str], brand: str, exclude_names: list[str]) -> list[dict]:
     """Uses Gemini to find real-world devices NOT in the dataset."""
@@ -223,8 +452,7 @@ Ensure radar values are between 0 and 100. DO NOT wrap JSON in markdown block. R
             text = text.split("```")[1]
             if text.startswith("json"):
                 text = text[4:]
-        
-        import json
+
         pick = json.loads(text.strip())
         return [pick]
     except Exception as e:

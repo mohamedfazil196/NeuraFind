@@ -3,8 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NeuraFind — AI Device Recommender</title>
-  <meta name="description" content="Tell us your budget and what matters — NeuraFind's AI finds your perfect device instantly." />
+  <title>NeuraFind — AI Device Recommender | Find Your Perfect Device</title>
+  <meta name="description" content="NeuraFind uses real-time AI to find your perfect mobile, laptop, or smartwatch. Current market prices, personality-based matching, and smart budget advice." />
+  <meta name="keywords" content="AI device recommender, best phone India, laptop recommendation, smartwatch finder, NeuraFind" />
+  <meta property="og:title" content="NeuraFind — AI-Powered Device Recommender" />
+  <meta property="og:description" content="Stop Googling. Tell us what you need — our AI finds your perfect device in seconds with real-time market prices." />
+  <meta property="og:type" content="website" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -28,8 +32,8 @@
       <button class="nav-pill" onclick="showSection('history')">📜 History</button>
     </div>
     <div class="nav-gemini-badge">
-      <div class="gemini-dot"></div>
-      <span>Advanced AI Engine</span>
+      <div class="live-dot-pulse"></div>
+      <span>Real-Time AI Engine</span>
     </div>
   </div>
 </nav>
@@ -41,8 +45,12 @@
 
   <!-- Hero -->
   <section class="hero">
+    <div class="hero-badge">
+      <div class="badge-dot"></div>
+      <span>LIVE · Real-Time Market Prices · Powered by Gemini AI</span>
+    </div>
     <h1 class="hero-title">Stop Googling.<br><span class="gradient-text">Just Tell Us What You Need.</span></h1>
-    <p class="hero-sub">No tech jargon. Pick your budget and what matters most — our AI finds your perfect device in seconds.</p>
+    <p class="hero-sub">No tech jargon. Pick your budget and what matters most — our AI scans the current market and finds your perfect device in seconds.</p>
   </section>
 
   <!-- ── Wizard Container ───────────────────────────────────────────────── -->
@@ -54,7 +62,7 @@
       <div class="step-line" id="sl-1"></div>
       <div class="step-item" id="si-2"><div class="step-circle">2</div><span class="step-label">Budget</span></div>
       <div class="step-line" id="sl-2"></div>
-      <div class="step-item" id="si-3"><div class="step-circle">3</div><span class="step-label">Priorities</span></div>
+      <div class="step-item" id="si-3"><div class="step-circle">3</div><span class="step-label">Preferences</span></div>
       <div class="step-line" id="sl-3"></div>
       <div class="step-item" id="si-4"><div class="step-circle">4</div><span class="step-label">AI Results</span></div>
     </div>
@@ -67,19 +75,19 @@
           <div class="device-icon-wrap">📱</div>
           <div class="device-name">Mobile Phone</div>
           <div class="device-desc">Smartphones & 5G</div>
-          <div class="device-count">60+ devices</div>
+          <div class="device-count">🔴 Live AI Search</div>
         </button>
         <button class="device-card" onclick="selectDevice('laptop')" id="dc-laptop">
           <div class="device-icon-wrap">💻</div>
           <div class="device-name">Laptop</div>
           <div class="device-desc">Ultrabooks & Gaming</div>
-          <div class="device-count">35+ devices</div>
+          <div class="device-count">🔴 Live AI Search</div>
         </button>
         <button class="device-card" onclick="selectDevice('smartwatch')" id="dc-smartwatch">
           <div class="device-icon-wrap">⌚</div>
           <div class="device-name">Smartwatch</div>
           <div class="device-desc">Fitness & Health</div>
-          <div class="device-count">25+ devices</div>
+          <div class="device-count">🔴 Live AI Search</div>
         </button>
       </div>
     </div>
@@ -110,7 +118,7 @@
       <button class="btn-next" onclick="goToStep(3)">Set Budget & Continue →</button>
     </div>
 
-    <!-- ── Step 3: Priorities ─────────────────────────────────────────────── -->
+    <!-- ── Step 3: Priorities + Lifestyle ──────────────────────────────────── -->
     <div class="wizard-step hidden" id="step-3">
       <button class="back-btn" onclick="goToStep(2)">← Back</button>
       <h2 class="step-title" style="margin-top:14px">What matters most to you?</h2>
@@ -118,6 +126,55 @@
 
       <div class="priority-grid" id="priority-grid">
         <!-- Populated by JS based on device type -->
+      </div>
+
+      <!-- ── Lifestyle Questions (V2) ─────────────────────────────────────── -->
+      <div class="lifestyle-section">
+        <div class="lifestyle-header">
+          <span class="lifestyle-icon">🎯</span>
+          <div>
+            <div class="lifestyle-title">Tell us about yourself</div>
+            <div class="lifestyle-sub">Helps our AI detect your personality & tailor picks</div>
+          </div>
+        </div>
+
+        <div class="lifestyle-grid">
+          <div class="lifestyle-item">
+            <label class="form-label">📋 Primary Usage</label>
+            <select class="form-select" id="usage-select">
+              <option value="general">General / Everyday</option>
+              <option value="social_media">Social Media</option>
+              <option value="work">Work / Productivity</option>
+              <option value="gaming">Gaming</option>
+              <option value="photography">Photography / Content</option>
+              <option value="student">Student / Learning</option>
+            </select>
+          </div>
+          <div class="lifestyle-item">
+            <label class="form-label">🎮 Gaming Interest</label>
+            <select class="form-select" id="gaming-select">
+              <option value="no">Not at all</option>
+              <option value="casual">Casual gaming</option>
+              <option value="hardcore">Hardcore / Competitive</option>
+            </select>
+          </div>
+          <div class="lifestyle-item">
+            <label class="form-label">✈️ Travel Frequency</label>
+            <select class="form-select" id="travel-select">
+              <option value="rarely">Rarely</option>
+              <option value="sometimes">Sometimes</option>
+              <option value="frequently">Frequently</option>
+            </select>
+          </div>
+          <div class="lifestyle-item">
+            <label class="form-label">📸 Camera Priority</label>
+            <select class="form-select" id="camera-select">
+              <option value="low">Not important</option>
+              <option value="medium">Nice to have</option>
+              <option value="high">Top priority</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       <!-- Optional brand -->
@@ -147,7 +204,7 @@
 
       <button class="btn-submit" id="submit-btn" onclick="runRecommend()">
         <span>✦</span>
-        <span id="submit-label">Find My Best Matches</span>
+        <span id="submit-label">Find My Best Matches — Live AI Search</span>
         <div class="btn-shimmer"></div>
       </button>
     </div>
@@ -160,6 +217,7 @@
           <h2 class="step-title" style="margin-top:10px">Your Top <span class="gradient-text">AI Picks</span></h2>
         </div>
         <div class="results-actions">
+          <span class="source-badge" id="source-badge">🔴 LIVE</span>
           <span class="results-badge" id="results-badge">3 matches</span>
           <button class="action-btn" id="btn-compare" style="display:none" onclick="openBattleMode()">⚔️ Compare Top 2</button>
           <button class="action-btn" onclick="exportPDF()">📄 Export PDF</button>
@@ -171,8 +229,17 @@
         <div class="loader-orbs">
           <div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div>
         </div>
-        <p class="loader-text">🧠 Analysing devices · AI generating insights…</p>
+        <p class="loader-text">🔴 Scanning live market · AI analyzing devices · Detecting personality…</p>
+        <!-- Skeleton cards -->
+        <div class="skeleton-cards">
+          <div class="skeleton-card"><div class="skel-line skel-title"></div><div class="skel-line skel-body"></div><div class="skel-line skel-body short"></div></div>
+          <div class="skeleton-card"><div class="skel-line skel-title"></div><div class="skel-line skel-body"></div><div class="skel-line skel-body short"></div></div>
+          <div class="skeleton-card"><div class="skel-line skel-title"></div><div class="skel-line skel-body"></div><div class="skel-line skel-body short"></div></div>
+        </div>
       </div>
+
+      <!-- Personality + Tradeoff cards (V2) -->
+      <div id="ai-insights-row" class="ai-insights-row hidden"></div>
 
       <!-- Result cards -->
       <div id="results-list"></div>
@@ -195,6 +262,40 @@
     </div>
   </div>
 </main>
+
+<!-- ── Footer ─────────────────────────────────────────────────────────────── -->
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <span class="footer-logo">🧠 Neura<span class="logo-accent">Find</span></span>
+      <p class="footer-tagline">AI-Powered Device Recommendations · Real-Time Market Prices</p>
+    </div>
+    <div class="footer-links">
+      <div class="footer-col">
+        <div class="footer-col-title">Product</div>
+        <a href="#">Mobile Finder</a>
+        <a href="#">Laptop Finder</a>
+        <a href="#">Smartwatch Finder</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Technology</div>
+        <a href="#">Gemini AI Engine</a>
+        <a href="#">ML Scoring</a>
+        <a href="#">Cosine Similarity</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Legal</div>
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Use</a>
+        <a href="#">Affiliate Disclosure</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>© 2026 NeuraFind. Built with ❤️ using Python, Flask, scikit-learn & Google Gemini AI.</p>
+      <p class="footer-disclosure">Product links may direct you to Amazon.in or Flipkart. Prices shown are AI-estimated and may vary.</p>
+    </div>
+  </div>
+</footer>
 
 <!-- ── Chat FAB ────────────────────────────────────────────────────────────── -->
 <button class="chat-fab" onclick="toggleChat()">
@@ -220,7 +321,7 @@
     </div>
   </div>
   <div class="chat-input-row">
-    <input type="text" id="chat-input" class="chat-input" placeholder="e.g. Which is better — iPhone 15 or Pixel 9?" onkeydown="handleChatKey(event)" />
+    <input type="text" id="chat-input" class="chat-input" placeholder="e.g. Which is better — iPhone 16 or Pixel 10?" onkeydown="handleChatKey(event)" />
     <button class="chat-send" onclick="sendChat()">→</button>
   </div>
 </div>

@@ -1,62 +1,143 @@
 """
-app.py — NeuraFind Advanced AI Device Recommender
+app.py — NeuraFind V2 Advanced AI Device Recommender
 Routes: /recommend, /chat, /market-insight, /compare, /history
+V2: Real-time Gemini-first recommendations with ML fallback
+V2.1: Supabase PostgreSQL for persistent production-grade history
 """
 
-from flask import Flask, render_template, request, jsonify, session
+import os
+import uuid
 import secrets
+from flask import Flask, render_template, request, jsonify, make_response
+from dotenv import load_dotenv
+
 from model import recommend
-from gemini_client import explain_recommendation, chat as gemini_chat, market_insight
+from gemini_client import (
+    explain_recommendation, chat as gemini_chat, market_insight,
+    get_realtime_recommendations, get_live_pick
+)
+
+# Initialize Supabase (optional, falls back to memory if not configured)
+load_dotenv(override=True)
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+
+supabase_client = None
+if SUPABASE_URL and SUPABASE_KEY:
+    try:
+        from supabase import create_client
+        supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        print("[NeuraFind] ✅ Supabase connected for persistent history.")
+    except Exception as e:
+        print(f"[NeuraFind] ⚠️ Supabase init error: {e}")
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(32)
 
+# In-memory fallback if Supabase is not configured
+_memory_history = {}
 
-def _save_history(device_type, budget, priorities, results):
-    if "history" not in session:
-        session["history"] = []
+
+def _get_or_create_user_id(req):
+    """Retrieve anon_id from cookies or generate a new one."""
+    anon_id = req.cookies.get("neurafind_anon_id")
+    if not anon_id:
+        anon_id = str(uuid.uuid4())
+    return anon_id
+
+
+def _save_history(user_id, device_type, budget, priorities, results):
+    """Save search history to Supabase or fallback memory."""
+    top_result = results[0]["name"] if results else "N/A"
+    score = results[0].get("score", 0) if results else 0
+    
     entry = {
+        "user_id": user_id,
         "device_type": device_type,
-        "budget":      budget,
-        "priorities":  priorities,
-        "top_result":  results[0]["name"] if results else "N/A",
-        "score":       results[0]["score"] if results else 0,
-        "count":       len(results),
+        "budget": budget,
+        "priorities": priorities,
+        "top_result": top_result,
+        "score": score,
+        "result_count": len(results)
     }
-    session["history"] = ([entry] + session["history"])[:10]
-    session.modified = True
+
+    if supabase_client:
+        try:
+            supabase_client.table("search_history").insert(entry).execute()
+        except Exception as e:
+            print(f"[NeuraFind] ⚠️ Failed to save history to Supabase: {e}")
+    else:
+        # Fallback to memory
+        if user_id not in _memory_history:
+            _memory_history[user_id] = []
+        # Add timestamp manually for memory
+        import datetime
+        entry["created_at"] = datetime.datetime.now().isoformat()
+        _memory_history[user_id].insert(0, entry)
+        _memory_history[user_id] = _memory_history[user_id][:20]
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    resp = make_response(render_template("index.html"))
+    # Ensure every user gets an anonymous tracking ID cookie for history
+    if not request.cookies.get("neurafind_anon_id"):
+        resp.set_cookie("neurafind_anon_id", str(uuid.uuid4()), max_age=60*60*24*365) # 1 year
+    return resp
 
 
 @app.route("/recommend", methods=["POST"])
 def get_recommendations():
-    """
-    Body: { device_type, budget, priorities: [...], brand }
-    Returns: { recommendations: [top-3], ai_powered: bool }
-    """
     try:
-        data        = request.get_json(force=True)
+        user_id = _get_or_create_user_id(request)
+        data = request.get_json(force=True)
+        
         device_type = data.get("device_type", "").strip().lower()
         budget      = float(data.get("budget", 30000))
         priorities  = data.get("priorities", [])
         brand       = data.get("brand", "")
 
+        # V2 lifestyle fields
+        usage           = data.get("usage", "general")
+        gaming          = data.get("gaming", "no")
+        travel          = data.get("travel", "no")
+        camera_priority = data.get("camera_priority", "medium")
+
         if device_type not in ("mobile", "laptop", "smartwatch"):
             return jsonify({"error": "Invalid device type."}), 400
 
+        # ── PRIMARY: Real-time Gemini recommendations ─────────────────────
+        realtime = get_realtime_recommendations(
+            device_type, budget, priorities, brand,
+            usage, gaming, travel, camera_priority,
+        )
+
+        if realtime and realtime.get("recommendations"):
+            results = realtime["recommendations"]
+            results.sort(key=lambda x: x.get("score", 0), reverse=True)
+
+            _save_history(user_id, device_type, budget, priorities, results)
+
+            resp = make_response(jsonify({
+                "recommendations": results,
+                "personality":     realtime.get("personality", {}),
+                "tradeoff":        realtime.get("tradeoff", {}),
+                "ai_powered":      True,
+                "source":          "realtime",
+            }))
+            resp.set_cookie("neurafind_anon_id", user_id, max_age=60*60*24*365)
+            return resp
+
+        # ── FALLBACK: Local ML engine ─────────────────────────────────────
+        print("[NeuraFind] Real-time unavailable — falling back to ML engine")
         results = recommend(device_type, budget, priorities, brand)
 
-        # Gemini explanation for all top-2 from dataset
-        results_subset = results[:2] # Keep top 2 from dataset
+        results_subset = results[:2]
         exclude_names = []
         for i, res in enumerate(results_subset):
-            exclude_names.append(res['name'])
+            exclude_names.append(res["name"])
             explanation = explain_recommendation(
                 device_name=res["name"],
                 specs=res["specs"],
@@ -66,11 +147,8 @@ def get_recommendations():
             )
             results_subset[i]["gemini_explanation"] = explanation
 
-        # Get 1 live pick from Gemini
-        from gemini_client import get_live_pick
         live_picks = get_live_pick(device_type, budget, priorities, brand, exclude_names)
-        
-        # If Gemini returned something, use it as the 3rd. Otherwise fallback to the 3rd best local result.
+
         if live_picks:
             results_subset.extend(live_picks)
         elif len(results) > 2:
@@ -84,15 +162,20 @@ def get_recommendations():
             )
             results_subset.append(res_3)
 
-        # Re-assign back to results before sorting
         results = results_subset
-        
-        # Sort by score just in case
-        results.sort(key=lambda x: x.get('score', 0), reverse=True)
+        results.sort(key=lambda x: x.get("score", 0), reverse=True)
 
-        _save_history(device_type, budget, priorities, results)
+        _save_history(user_id, device_type, budget, priorities, results)
 
-        return jsonify({"recommendations": results, "ai_powered": True})
+        resp = make_response(jsonify({
+            "recommendations": results,
+            "personality":     {},
+            "tradeoff":        {},
+            "ai_powered":      True,
+            "source":          "dataset",
+        }))
+        resp.set_cookie("neurafind_anon_id", user_id, max_age=60*60*24*365)
+        return resp
 
     except Exception as exc:
         import traceback; traceback.print_exc()
@@ -119,25 +202,40 @@ def market_insight_endpoint():
     return jsonify(insight)
 
 
-@app.route("/compare", methods=["POST"])
-def compare_endpoint():
-    import pandas as pd
-    data        = request.get_json(force=True)
-    device_type = data.get("device_type", "mobile")
-    names       = data.get("devices", [])
-    df = pd.read_csv(f"datasets/{device_type}.csv")
-    comparison = {}
-    for name in names:
-        row = df[df["name"] == name]
-        if not row.empty:
-            from model import _build_specs
-            comparison[name] = _build_specs(device_type, row.iloc[0])
-    return jsonify({"comparison": comparison})
-
-
 @app.route("/history", methods=["GET"])
 def history_endpoint():
-    return jsonify({"history": session.get("history", [])})
+    user_id = _get_or_create_user_id(request)
+    
+    if supabase_client:
+        try:
+            # Query history from Supabase for this user
+            response = supabase_client.table("search_history") \
+                .select("*") \
+                .eq("user_id", user_id) \
+                .order("created_at", desc=True) \
+                .limit(20) \
+                .execute()
+            history = response.data
+            
+            # Format the output to match what the frontend expects
+            formatted_history = []
+            for item in history:
+                formatted_history.append({
+                    "device_type": item["device_type"],
+                    "budget": item["budget"],
+                    "priorities": item.get("priorities", []),
+                    "top_result": item["top_result"],
+                    "score": item["score"],
+                    "count": item["result_count"]
+                })
+            return jsonify({"history": formatted_history})
+            
+        except Exception as e:
+            print(f"[NeuraFind] ⚠️ Failed to load history from Supabase: {e}")
+            return jsonify({"history": []})
+    else:
+        # Fallback memory
+        return jsonify({"history": _memory_history.get(user_id, [])})
 
 
 if __name__ == "__main__":
